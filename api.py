@@ -15,10 +15,7 @@ app.add_middleware(
 )
 
 MODEL_PATH = 'best_food_model_27classes.pt'
-try:
-    model = YOLO(MODEL_PATH)
-except Exception as e:
-    pass
+model = YOLO(MODEL_PATH)
 
 NUTRITION_DB = {
     'Ayam Goreng': {'weight_g': 154, 'calories': 436, 'carbs': 5.6, 'protein': 34.6, 'fat': 30.7}, 
