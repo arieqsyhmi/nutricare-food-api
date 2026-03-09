@@ -5,6 +5,14 @@ import os
 
 app = FastAPI(title="Nutricare Food API v5 (Anti-Duplicate)")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # This is the VIP pass that lets FlutterFlow connect!
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 MODEL_PATH = 'best_food_model_27classes.pt'
 try:
     model = YOLO(MODEL_PATH)
