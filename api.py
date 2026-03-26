@@ -112,8 +112,28 @@ async def predict_food(file: UploadFile = File(...)):
     # Convert the dictionary back into a clean list for FlutterFlow
     final_results = [item for key, item in unique_detections.items()]
     
+    # 1. Calculate the Totals for the whole plate!
+    total_calories = sum(item['estimated_calories'] for item in final_results)
+    total_carbs = sum(item['estimated_carbs'] for item in final_results)
+    total_protein = sum(item['estimated_protein'] for item in final_results)
+    total_fat = sum(item['estimated_fat'] for item in final_results)
+    total_sugar = sum(item['estimated_sugar'] for item in final_results)
+    total_fiber = sum(item['estimated_fiber'] for item in final_results)
+
     # Remove the hidden math field before sending it to the app
     for item in final_results:
         del item['area']
         
-    return {"success": True, "results": final_results}
+    # 2. Send back BOTH the Totals and the Individual Results
+    return {
+        "success": True, 
+        "totals": {
+            "calories": round(total_calories, 1),
+            "carbs": round(total_carbs, 1),
+            "protein": round(total_protein, 1),
+            "fat": round(total_fat, 1),
+            "sugar": round(total_sugar, 1),
+            "fiber": round(total_fiber, 1)
+        },
+        "results": final_results
+    }
