@@ -59,7 +59,12 @@ async def predict_food(file: UploadFile = File(...)):
     with open(temp_file, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    results = model(temp_file, conf=0.28)
+    # =====================================================================
+    # RENDER STRESS TEST: Increased Resolution
+    # Default is 640. Trying 1024 for better small-object detection.
+    # =====================================================================
+    INFERENCE_SIZE = 1024
+    results = model(temp_file, conf=0.28, imgsz=INFERENCE_SIZE)
     
     # A dictionary to hold only the biggest version of each detected food
     unique_detections = {}
