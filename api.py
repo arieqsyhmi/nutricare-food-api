@@ -60,11 +60,13 @@ async def predict_food(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
         
     # =====================================================================
-    # RENDER STRESS TEST: Increased Resolution
-    # Default is 640. Trying 1024 for better small-object detection.
+    # RENDER STRESS TEST: The "Goldilocks" Configuration
+    # imgsz=832: Balances high-resolution detection with server speed.
+    # conf=0.273: The scientifically optimal F1-score threshold.
+    # max_det=30: The CPU Safety Valve to prevent NMS lockups.
     # =====================================================================
-    INFERENCE_SIZE = 1024
-    results = model(temp_file, conf=0.28, imgsz=INFERENCE_SIZE)
+    INFERENCE_SIZE = 832
+    results = model(temp_file, conf=0.273, imgsz=INFERENCE_SIZE, max_det=30)
     
     # A dictionary to hold only the biggest version of each detected food
     unique_detections = {}
