@@ -5,7 +5,7 @@ import shutil
 import os
 import uuid  # Added to prevent race conditions during simultaneous user uploads
 
-app = FastAPI(title="Nutricare Food API v5 (Anti-Duplicate & Diabetic Metrics)")
+app = FastAPI(title="Nutricare Food API v6 (Fully Structured for FlutterFlow)")
 
 app.add_middleware(
     CORSMiddleware,
@@ -92,18 +92,16 @@ async def predict_food(file: UploadFile = File(...)):
             # Fallback dictionary now includes sugar and fiber
             macros = NUTRITION_DB.get(class_name, {'weight_g': 0, 'calories': 0, 'carbs': 0, 'protein': 0, 'fat': 0, 'sugar': 0, 'fiber': 0})
             
-            # Save the best version to our dictionary, dynamically scaling ALL metrics
+            # PERFECTLY MATCHED TO FLUTTERFLOW STRUCT (Integers for macros, String for amount)
             unique_detections[class_name] = {
-                "food_name": class_name,
-                "detected_size": size_label,
-                "bounding_box_area": round(area_ratio, 2),
-                "estimated_weight_g": round(macros['weight_g'] * portion_scale, 1),
-                "estimated_carbs": round(macros['carbs'] * portion_scale, 1),
-                "estimated_calories": round(macros['calories'] * portion_scale, 1),
-                "estimated_protein": round(macros['protein'] * portion_scale, 1),
-                "estimated_fat": round(macros['fat'] * portion_scale, 1),
-                "estimated_sugar": round(macros['sugar'] * portion_scale, 1), 
-                "estimated_fiber": round(macros['fiber'] * portion_scale, 1), 
+                "name": class_name,
+                "amount": f"{int(round(macros['weight_g'] * portion_scale, 0))} g",
+                "calories": int(round(macros['calories'] * portion_scale, 0)),
+                "protein": int(round(macros['protein'] * portion_scale, 0)),
+                "fat": int(round(macros['fat'] * portion_scale, 0)),
+                "carbs": int(round(macros['carbs'] * portion_scale, 0)),
+                "sugar": int(round(macros['sugar'] * portion_scale, 0)), 
+                "fiber": int(round(macros['fiber'] * portion_scale, 0)), 
                 "area": area_ratio # Hidden field just for the math logic
             }
             
@@ -112,28 +110,28 @@ async def predict_food(file: UploadFile = File(...)):
     # Convert the dictionary back into a clean list for FlutterFlow
     final_results = [item for key, item in unique_detections.items()]
     
-    # 1. Calculate the Totals for the whole plate!
-    total_calories = sum(item['estimated_calories'] for item in final_results)
-    total_carbs = sum(item['estimated_carbs'] for item in final_results)
-    total_protein = sum(item['estimated_protein'] for item in final_results)
-    total_fat = sum(item['estimated_fat'] for item in final_results)
-    total_sugar = sum(item['estimated_sugar'] for item in final_results)
-    total_fiber = sum(item['estimated_fiber'] for item in final_results)
+    # Calculate the Totals (using the new integer keys)
+    total_calories = sum(item['calories'] for item in final_results)
+    total_carbs = sum(item['carbs'] for item in final_results)
+    total_protein = sum(item['protein'] for item in final_results)
+    total_fat = sum(item['fat'] for item in final_results)
+    total_sugar = sum(item['sugar'] for item in final_results)
+    total_fiber = sum(item['fiber'] for item in final_results)
 
     # Remove the hidden math field before sending it to the app
     for item in final_results:
         del item['area']
         
-    # 2. Send back BOTH the Totals and the Individual Results
+    # Send back BOTH the Totals and the Individual Results
     return {
         "success": True, 
         "totals": {
-            "calories": round(total_calories, 1),
-            "carbs": round(total_carbs, 1),
-            "protein": round(total_protein, 1),
-            "fat": round(total_fat, 1),
-            "sugar": round(total_sugar, 1),
-            "fiber": round(total_fiber, 1)
+            "calories": total_calories,
+            "carbs": total_carbs,
+            "protein": total_protein,
+            "fat": total_fat,
+            "sugar": total_sugar,
+            "fiber": total_fiber
         },
         "results": final_results
     }
