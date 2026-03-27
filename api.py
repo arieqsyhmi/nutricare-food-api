@@ -61,9 +61,9 @@ async def predict_food(file: UploadFile = File(...)):
         
     # =====================================================================
     # RENDER STRESS TEST: Increased Resolution
-    # Default is 640. Trying 1024 for better small-object detection.
+    # Default is 640. Trying 1280 for better small-object detection.
     # =====================================================================
-    INFERENCE_SIZE = 1024
+    INFERENCE_SIZE = 1280
     results = model(temp_file, conf=0.28, imgsz=INFERENCE_SIZE)
     
     # A dictionary to hold only the biggest version of each detected food
