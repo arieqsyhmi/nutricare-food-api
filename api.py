@@ -3,13 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 import shutil
 import os
-import uuid  # Added to prevent race conditions during simultaneous user uploads
+import uuid
+import gc
 
-app = FastAPI(title="Nutricare Food API v6 (Fully Structured for FlutterFlow)")
+app = FastAPI(title="Nutricare Food API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # This is the VIP pass that lets FlutterFlow connect!
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -21,7 +22,6 @@ try:
 except Exception as e:
     print(f"Model failed to load: {e}")
 
-# Complete Database with calculated Sugar and Fiber metrics for Diabetic Management
 NUTRITION_DB = {
     'Ayam Goreng': {'weight_g': 154, 'calories': 436, 'carbs': 5.6, 'protein': 34.6, 'fat': 30.7, 'sugar': 0.1, 'fiber': 0.0}, 
     'Char Kway Teow': {'weight_g': 200, 'calories': 346, 'carbs': 48.0, 'protein': 9.0, 'fat': 13.0, 'sugar': 3.5, 'fiber': 2.0}, 
@@ -54,21 +54,13 @@ NUTRITION_DB = {
 
 @app.post("/predict")
 async def predict_food(file: UploadFile = File(...)):
-    # Added UUID to ensure safe multi-user processing
     temp_file = f"temp_{uuid.uuid4()}_{file.filename}"
     with open(temp_file, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    # =====================================================================
-    # RENDER STRESS TEST: The "Goldilocks" Configuration
-    # imgsz=832: Balances high-resolution detection with server speed.
-    # conf=0.273: The scientifically optimal F1-score threshold.
-    # max_det=30: The CPU Safety Valve to prevent NMS lockups.
-    # =====================================================================
     INFERENCE_SIZE = 832
     results = model(temp_file, conf=0.273, imgsz=INFERENCE_SIZE, max_det=30)
     
-    # A dictionary to hold only the biggest version of each detected food
     unique_detections = {}
     
     for r in results:
@@ -81,25 +73,19 @@ async def predict_food(file: UploadFile = File(...)):
             h_norm = float(box.xywhn[0][3])
             area_ratio = w_norm * h_norm 
             
-            # If we already saw this food, only overwrite it if this new box is bigger
             if class_name in unique_detections:
                 if area_ratio <= unique_detections[class_name]['area']:
-                    continue # Skip this smaller duplicate box
+                    continue 
             
             if area_ratio < 0.15:
                 portion_scale = 0.5
-                size_label = "Small Portion"
             elif area_ratio > 0.45:
                 portion_scale = 1.5
-                size_label = "Large Portion"
             else:
                 portion_scale = 1.0
-                size_label = "Standard Portion"
 
-            # Fallback dictionary now includes sugar and fiber
             macros = NUTRITION_DB.get(class_name, {'weight_g': 0, 'calories': 0, 'carbs': 0, 'protein': 0, 'fat': 0, 'sugar': 0, 'fiber': 0})
             
-            # PERFECTLY MATCHED TO FLUTTERFLOW STRUCT (Integers for macros, String for amount)
             unique_detections[class_name] = {
                 "name": class_name,
                 "amount": f"{int(round(macros['weight_g'] * portion_scale, 0))} g",
@@ -109,15 +95,13 @@ async def predict_food(file: UploadFile = File(...)):
                 "carbs": int(round(macros['carbs'] * portion_scale, 0)),
                 "sugar": int(round(macros['sugar'] * portion_scale, 0)), 
                 "fiber": int(round(macros['fiber'] * portion_scale, 0)), 
-                "area": area_ratio # Hidden field just for the math logic
+                "area": area_ratio 
             }
             
     os.remove(temp_file)
     
-    # Convert the dictionary back into a clean list for FlutterFlow
     final_results = [item for key, item in unique_detections.items()]
     
-    # Calculate the Totals (using the new integer keys)
     total_calories = sum(item['calories'] for item in final_results)
     total_carbs = sum(item['carbs'] for item in final_results)
     total_protein = sum(item['protein'] for item in final_results)
@@ -125,11 +109,13 @@ async def predict_food(file: UploadFile = File(...)):
     total_sugar = sum(item['sugar'] for item in final_results)
     total_fiber = sum(item['fiber'] for item in final_results)
 
-    # Remove the hidden math field before sending it to the app
     for item in final_results:
         del item['area']
         
-    # Send back BOTH the Totals and the Individual Results
+    # Clear RAM before responding
+    del results
+    gc.collect()
+        
     return {
         "success": True, 
         "totals": {
