@@ -58,7 +58,7 @@ async def predict_food(file: UploadFile = File(...)):
     with open(temp_file, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    INFERENCE_SIZE = 832
+    INFERENCE_SIZE = 640
     results = model(temp_file, conf=0.273, imgsz=INFERENCE_SIZE, max_det=30)
     
     unique_detections = {}
