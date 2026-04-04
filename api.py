@@ -59,9 +59,10 @@ async def predict_food(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
         
     INFERENCE_SIZE = 640
-    results = model(temp_file, conf=0.273, imgsz=INFERENCE_SIZE, max_det=30)
+    # Added iou=0.5 to prevent overlapping boxes natively
+    results = model(temp_file, conf=0.273, imgsz=INFERENCE_SIZE, max_det=30, iou=0.5)
     
-    unique_detections = {}
+    meal_items = {}
     
     for r in results:
         boxes = r.boxes
@@ -73,10 +74,7 @@ async def predict_food(file: UploadFile = File(...)):
             h_norm = float(box.xywhn[0][3])
             area_ratio = w_norm * h_norm 
             
-            if class_name in unique_detections:
-                if area_ratio <= unique_detections[class_name]['area']:
-                    continue 
-            
+            # Portion scale logic based on bounding box size
             if area_ratio < 0.15:
                 portion_scale = 0.5
             elif area_ratio > 0.45:
@@ -86,31 +84,70 @@ async def predict_food(file: UploadFile = File(...)):
 
             macros = NUTRITION_DB.get(class_name, {'weight_g': 0, 'calories': 0, 'carbs': 0, 'protein': 0, 'fat': 0, 'sugar': 0, 'fiber': 0})
             
-            unique_detections[class_name] = {
-                "name": class_name,
-                "amount": f"{int(round(macros['weight_g'] * portion_scale, 0))} g",
-                "calories": int(round(macros['calories'] * portion_scale, 0)),
-                "protein": int(round(macros['protein'] * portion_scale, 0)),
-                "fat": int(round(macros['fat'] * portion_scale, 0)),
-                "carbs": int(round(macros['carbs'] * portion_scale, 0)),
-                "sugar": int(round(macros['sugar'] * portion_scale, 0)), 
-                "fiber": int(round(macros['fiber'] * portion_scale, 0)), 
-                "area": area_ratio 
-            }
+            # Calculate exactly what this specific box is worth
+            item_weight = macros['weight_g'] * portion_scale
+            item_cals = macros['calories'] * portion_scale
+            item_protein = macros['protein'] * portion_scale
+            item_fat = macros['fat'] * portion_scale
+            item_carbs = macros['carbs'] * portion_scale
+            item_sugar = macros['sugar'] * portion_scale
+            item_fiber = macros['fiber'] * portion_scale
+
+            # ACCUMULATION LOGIC: Add to existing totals if we already saw this food
+            if class_name in meal_items:
+                meal_items[class_name]['count'] += 1
+                meal_items[class_name]['weight_g'] += item_weight
+                meal_items[class_name]['calories'] += item_cals
+                meal_items[class_name]['protein'] += item_protein
+                meal_items[class_name]['fat'] += item_fat
+                meal_items[class_name]['carbs'] += item_carbs
+                meal_items[class_name]['sugar'] += item_sugar
+                meal_items[class_name]['fiber'] += item_fiber
+            else:
+                meal_items[class_name] = {
+                    "name": class_name,
+                    "count": 1,
+                    "weight_g": item_weight,
+                    "calories": item_cals,
+                    "protein": item_protein,
+                    "fat": item_fat,
+                    "carbs": item_carbs,
+                    "sugar": item_sugar,
+                    "fiber": item_fiber
+                }
             
     os.remove(temp_file)
     
-    final_results = [item for key, item in unique_detections.items()]
-    
-    total_calories = sum(item['calories'] for item in final_results)
-    total_carbs = sum(item['carbs'] for item in final_results)
-    total_protein = sum(item['protein'] for item in final_results)
-    total_fat = sum(item['fat'] for item in final_results)
-    total_sugar = sum(item['sugar'] for item in final_results)
-    total_fiber = sum(item['fiber'] for item in final_results)
+    # Process the dictionary into the final lists for FlutterFlow
+    final_results = []
+    total_calories = 0
+    total_carbs = 0
+    total_protein = 0
+    total_fat = 0
+    total_sugar = 0
+    total_fiber = 0
 
-    for item in final_results:
-        del item['area']
+    for key, item in meal_items.items():
+        total_calories += int(round(item['calories'], 0))
+        total_carbs += int(round(item['carbs'], 0))
+        total_protein += int(round(item['protein'], 0))
+        total_fat += int(round(item['fat'], 0))
+        total_sugar += int(round(item['sugar'], 0))
+        total_fiber += int(round(item['fiber'], 0))
+        
+        # Change the display name if there are multiple (e.g., "x2 Curry Puff")
+        display_name = f"x{item['count']} {item['name']}" if item['count'] > 1 else item['name']
+        
+        final_results.append({
+            "name": display_name,
+            "amount": f"{int(round(item['weight_g'], 0))} g",
+            "calories": int(round(item['calories'], 0)),
+            "protein": int(round(item['protein'], 0)),
+            "fat": int(round(item['fat'], 0)),
+            "carbs": int(round(item['carbs'], 0)),
+            "sugar": int(round(item['sugar'], 0)),
+            "fiber": int(round(item['fiber'], 0))
+        })
         
     # Clear RAM before responding
     del results
